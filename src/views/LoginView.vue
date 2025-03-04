@@ -47,50 +47,59 @@
   </q-layout>
 </template>
 
-<script setup lang="ts">
-  import { ref } from 'vue';
+<script lang="ts">
+  import { defineComponent } from 'vue';
   import { useRouter } from 'vue-router';
   import { useUserStore } from '../stores/user';
   import { useQuasar } from 'quasar';
 
-  const router = useRouter();
-  const userStore = useUserStore();
-  const $q = useQuasar();
+  export default defineComponent({
+    name: 'LoginView',
 
-  const login = ref('');
-  const error = ref('');
+    data() {
+      return {
+        login: '',
+        error: '',
+        router: useRouter(),
+        userStore: useUserStore(),
+        $q: useQuasar(),
+      };
+    },
 
-  const handleLogin = async () => {
-    if (!login.value) return;
+    methods: {
+      async handleLogin() {
+        if (!this.login) return;
 
-    try {
-      if ($q && $q.loading) {
-        $q.loading.show({
-          message: 'Logging in...',
-          spinnerColor: 'primary',
-        });
-      }
+        try {
+          if (this.$q && this.$q.loading) {
+            this.$q.loading.show({
+              message: 'Logging in...',
+              spinnerColor: 'primary',
+            });
+          }
 
-      await userStore.login(login.value);
+          await this.userStore.login(this.login);
 
-      if ($q && $q.loading) {
-        $q.loading.hide();
-      }
+          if (this.$q && this.$q.loading) {
+            this.$q.loading.hide();
+          }
 
-      if ($q && $q.notify) {
-        $q.notify({
-          type: 'positive',
-          message: 'Login successful!',
-          icon: 'check_circle',
-        });
-      }
+          if (this.$q && this.$q.notify) {
+            this.$q.notify({
+              type: 'positive',
+              message: 'Login successful!',
+              icon: 'check_circle',
+            });
+          }
 
-      await router.push('/chat');
-    } catch (e) {
-      if ($q && $q.loading) {
-        $q.loading.hide();
-      }
-      error.value = 'Failed to login. Please try again.';
-    }
-  };
+          await this.router.push('/chat');
+        } catch (e) {
+          if (this.$q && this.$q.loading) {
+            this.$q.loading.hide();
+          }
+          this.error = 'Failed to login. Please try again.';
+        }
+      },
+    },
+  });
 </script>

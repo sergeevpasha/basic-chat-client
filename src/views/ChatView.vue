@@ -143,198 +143,217 @@
   </q-layout>
 </template>
 
-<script setup lang="ts">
-  import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+<script lang="ts">
+  import { defineComponent } from 'vue';
   import { useRouter } from 'vue-router';
   import { useQuasar } from 'quasar';
   import { date } from 'quasar';
   import { useUserStore } from '../stores/user';
   import { useMessagesStore } from '../stores/messages';
 
-  const $q = useQuasar();
-  const router = useRouter();
-  const userStore = useUserStore();
-  const messagesStore = useMessagesStore();
+  export default defineComponent({
+    name: 'ChatView',
 
-  const newMessage = ref('');
-  const messagesContainer = ref<any>(null);
-  const loading = ref(true);
+    data() {
+      return {
+        newMessage: '',
+        messagesContainer: null as any,
+        loading: true,
+        userColors: new Map(),
+        colorOptions: [
+          'primary',
+          'secondary',
+          'accent',
+          'blue-7',
+          'purple-7',
+          'indigo-7',
+          'teal-7',
+          'green-7',
+          'pink-7',
+          'deep-purple-7',
+          'brown-7',
+          'blue-grey-7',
+        ],
+        userStore: useUserStore(),
+        messagesStore: useMessagesStore(),
+        $q: useQuasar(),
+        router: useRouter(),
+      };
+    },
 
-  const messages = computed(() => messagesStore.messages);
-  const userLogin = computed(() => userStore.currentUser?.login || '');
-  const isLoggedIn = computed(() => userStore.isLoggedIn);
-  const websocketError = computed(() => messagesStore.error);
+    computed: {
+      messages() {
+        return this.messagesStore.messages;
+      },
+      userLogin() {
+        return this.userStore.currentUser?.login || '';
+      },
+      isLoggedIn() {
+        return this.userStore.isLoggedIn;
+      },
+      websocketError() {
+        return this.messagesStore.error;
+      },
+    },
 
-  const userColors = new Map();
-  const colorOptions = [
-    'primary',
-    'secondary',
-    'accent',
-    'blue-7',
-    'purple-7',
-    'indigo-7',
-    'teal-7',
-    'green-7',
-    'pink-7',
-    'deep-purple-7',
-    'brown-7',
-    'blue-grey-7',
-  ];
-
-  function sendMessage() {
-    if (!newMessage.value.trim()) return;
-
-    try {
-      messagesStore
-        .sendMessage(newMessage.value)
-        .then(response => {
-          newMessage.value = '';
-
-          nextTick(() => {
-            scrollToBottom();
+    watch: {
+      'messages.length': function (newLength, oldLength) {
+        if (newLength > oldLength) {
+          this.$nextTick(() => {
+            this.scrollToBottom();
           });
+        }
+      },
+    },
+
+    mounted() {
+      if (!this.isLoggedIn) {
+        this.router.push({ name: 'login' });
+        return;
+      }
+
+      this.messagesStore
+        .fetchMessages()
+        .then(() => {
+          this.loading = false;
+          this.scrollToBottom();
         })
         .catch(error => {
-          $q.notify({
+          this.loading = false;
+          this.$q.notify({
             type: 'negative',
-            message: 'Failed to send message. Please try again.',
+            message: 'Failed to load messages',
             icon: 'error',
           });
         });
-    } catch (error) {
-      $q.notify({
-        type: 'negative',
-        message: 'An error occurred when sending the message',
-        icon: 'error',
-      });
-    }
-  }
 
-  function scrollToBottom() {
-    if (messagesContainer.value) {
-      const scrollArea = messagesContainer.value;
-      scrollArea.setScrollPosition('vertical', 1000000);
-    }
-  }
-
-  function formatDate(dateString: string): string {
-    const messageDate = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (messageDate.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (messageDate.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      return date.formatDate(messageDate, 'ddd, MMM D, YYYY');
-    }
-  }
-
-  function formatTime(dateString: string): string {
-    return date.formatDate(new Date(dateString), 'h:mm A');
-  }
-
-  function shouldShowDateSeparator(message: any, prevMessage: any): boolean {
-    if (!prevMessage) return true;
-
-    const messageDate = new Date(message.created_at);
-    const prevMessageDate = new Date(prevMessage.created_at);
-
-    return messageDate.toDateString() !== prevMessageDate.toDateString();
-  }
-
-  function getInitials(name: string): string {
-    return name.substring(0, 2).toUpperCase();
-  }
-
-  function getUserBubbleColor(user: any): string {
-    if (user.login === userLogin.value) {
-      return 'primary';
-    }
-
-    if (!userColors.has(user.id)) {
-      const colorIndex = userColors.size % colorOptions.length;
-      userColors.set(user.id, colorOptions[colorIndex]);
-    }
-
-    return userColors.get(user.id);
-  }
-
-  function formatMessageContent(content: any): string {
-    if (!content) return '';
-
-    if (typeof content === 'string') {
-      if (content.startsWith('{') && content.endsWith('}')) {
-        try {
-          const parsedContent = JSON.parse(content);
-          if (parsedContent.content) {
-            return parsedContent.content;
-          }
-        } catch (e) {}
-      }
-      return content;
-    }
-
-    if (typeof content === 'object' && content !== null) {
-      if (content.content) {
-        return content.content;
-      }
-      return JSON.stringify(content);
-    }
-
-    return String(content);
-  }
-
-  watch(
-    () => messages.value.length,
-    (newLength, oldLength) => {
-      if (newLength > oldLength) {
-        nextTick(() => {
-          scrollToBottom();
-        });
-      }
+      this.messagesStore.startMessageEvents();
     },
-  );
 
-  onMounted(async () => {
-    if (!isLoggedIn.value) {
-      router.push({ name: 'login' });
-      return;
-    }
+    unmounted() {
+      this.messagesStore.stopMessageEvents();
+    },
 
-    try {
-      await messagesStore.fetchMessages();
-      loading.value = false;
-      scrollToBottom();
-    } catch (error) {
-      loading.value = false;
-      $q.notify({
-        type: 'negative',
-        message: 'Failed to load messages',
-        icon: 'error',
-      });
-    }
+    methods: {
+      sendMessage() {
+        if (!this.newMessage.trim()) return;
 
-    messagesStore.startMessageEvents();
+        try {
+          this.messagesStore
+            .sendMessage(this.newMessage)
+            .then(response => {
+              this.newMessage = '';
+
+              this.$nextTick(() => {
+                this.scrollToBottom();
+              });
+            })
+            .catch(error => {
+              this.$q.notify({
+                type: 'negative',
+                message: 'Failed to send message. Please try again.',
+                icon: 'error',
+              });
+            });
+        } catch (error) {
+          this.$q.notify({
+            type: 'negative',
+            message: 'An error occurred when sending the message',
+            icon: 'error',
+          });
+        }
+      },
+
+      scrollToBottom() {
+        if (this.messagesContainer) {
+          const scrollArea = this.messagesContainer;
+          scrollArea.setScrollPosition('vertical', 1000000);
+        }
+      },
+
+      formatDate(dateString: string): string {
+        const messageDate = new Date(dateString);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (messageDate.toDateString() === today.toDateString()) {
+          return 'Today';
+        } else if (messageDate.toDateString() === yesterday.toDateString()) {
+          return 'Yesterday';
+        } else {
+          return date.formatDate(messageDate, 'ddd, MMM D, YYYY');
+        }
+      },
+
+      formatTime(dateString: string): string {
+        return date.formatDate(new Date(dateString), 'h:mm A');
+      },
+
+      shouldShowDateSeparator(message: any, prevMessage: any): boolean {
+        if (!prevMessage) return true;
+
+        const messageDate = new Date(message.created_at);
+        const prevMessageDate = new Date(prevMessage.created_at);
+
+        return messageDate.toDateString() !== prevMessageDate.toDateString();
+      },
+
+      getInitials(name: string): string {
+        return name.substring(0, 2).toUpperCase();
+      },
+
+      getUserBubbleColor(user: any): string {
+        if (user.login === this.userLogin) {
+          return 'primary';
+        }
+
+        if (!this.userColors.has(user.id)) {
+          const colorIndex = this.userColors.size % this.colorOptions.length;
+          this.userColors.set(user.id, this.colorOptions[colorIndex]);
+        }
+
+        return this.userColors.get(user.id);
+      },
+
+      formatMessageContent(content: any): string {
+        if (!content) return '';
+
+        if (typeof content === 'string') {
+          if (content.startsWith('{') && content.endsWith('}')) {
+            try {
+              const parsedContent = JSON.parse(content);
+              if (parsedContent.content) {
+                return parsedContent.content;
+              }
+            } catch (e) {}
+          }
+          return content;
+        }
+
+        if (typeof content === 'object' && content !== null) {
+          if (content.content) {
+            return content.content;
+          }
+          return JSON.stringify(content);
+        }
+
+        return String(content);
+      },
+
+      logout() {
+        this.messagesStore.stopMessageEvents();
+        this.userStore.logout();
+        this.router.push({ name: 'login' });
+        this.$q.notify({
+          type: 'positive',
+          message: 'Successfully logged out',
+          icon: 'logout',
+          position: 'top',
+        });
+      },
+    },
   });
-
-  onUnmounted(() => {
-    messagesStore.stopMessageEvents();
-  });
-
-  function logout() {
-    messagesStore.stopMessageEvents();
-    userStore.logout();
-    router.push({ name: 'login' });
-    $q.notify({
-      type: 'positive',
-      message: 'Successfully logged out',
-      icon: 'logout',
-      position: 'top',
-    });
-  }
 </script>
 
 <style scoped>
@@ -502,7 +521,6 @@
     font-weight: 500;
   }
 
-  /* Animations */
   .pulse-animation {
     animation: pulse 2s infinite;
   }
