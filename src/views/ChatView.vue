@@ -63,7 +63,7 @@
 
                     <q-chat-message
                       :name="message.user.login"
-                      :text="[formatMessageContent(message.content)]"
+                      :text="[message.content]"
                       :sent="message.user.login === userLogin"
                       :bg-color="getUserBubbleColor(message.user)"
                       text-color="white"
@@ -191,9 +191,6 @@
       isLoggedIn() {
         return this.userStore.isLoggedIn;
       },
-      websocketError() {
-        return this.messagesStore.error;
-      },
     },
 
     watch: {
@@ -241,14 +238,14 @@
         try {
           this.messagesStore
             .sendMessage(this.newMessage)
-            .then(response => {
+            .then(() => {
               this.newMessage = '';
 
               this.$nextTick(() => {
                 this.scrollToBottom();
               });
             })
-            .catch(error => {
+            .catch(() => {
               this.$q.notify({
                 type: 'negative',
                 message: 'Failed to send message. Please try again.',
@@ -314,31 +311,6 @@
         }
 
         return this.userColors.get(user.id);
-      },
-
-      formatMessageContent(content: any): string {
-        if (!content) return '';
-
-        if (typeof content === 'string') {
-          if (content.startsWith('{') && content.endsWith('}')) {
-            try {
-              const parsedContent = JSON.parse(content);
-              if (parsedContent.content) {
-                return parsedContent.content;
-              }
-            } catch (e) {}
-          }
-          return content;
-        }
-
-        if (typeof content === 'object' && content !== null) {
-          if (content.content) {
-            return content.content;
-          }
-          return JSON.stringify(content);
-        }
-
-        return String(content);
       },
 
       logout() {

@@ -63,7 +63,7 @@ export const useMessagesStore = defineStore('messages', {
         const messageContent = content.trim();
         const payload = {
           login: userStore.userLogin,
-          content: messageContent,
+          message: messageContent,
         };
 
         const data = await post<MessageResponse>('/api/messages', payload);
